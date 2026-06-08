@@ -21,7 +21,7 @@ from typing import Dict, Any
 from config import (
     PAPER_COLS, LINE_SEPARATOR, DOUBLE_SEPARATOR,
     FEED_LINES_AFTER, TEXT_ENCODING, ENCODING_ERRORS,
-    COMPANY_NAME_OVERRIDE,
+    COMPANY_NAME_OVERRIDE, FORM_FEED_AFTER,
 )
 
 # ── ESC/P Command Constants ────────────────────────────────────────────────────
@@ -277,5 +277,10 @@ def render_receipt(data: Dict[str, Any]) -> bytes:
     w(JUSTIFY_LEFT)
     for _ in range(FEED_LINES_AFTER):
         w(blank(1))
+
+    # Page printers (laser/inkjet) only eject a page on a form feed; the Epson
+    # LQ-690 (continuous feed) does not need one. Controlled by FORM_FEED_AFTER.
+    if FORM_FEED_AFTER:
+        w(FF)
 
     return bytes(buf)

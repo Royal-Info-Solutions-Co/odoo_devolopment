@@ -24,6 +24,10 @@ COMPANY_NAME_OVERRIDE = ""         # Leave empty to use name from payload
 RECEIPT_COPIES = 1                 # Number of copies to print per job
 FEED_LINES_AFTER = 4               # Blank lines to advance paper after receipt
 CUT_AFTER_PRINT = False            # LQ-690 is continuous feed; set False
+FORM_FEED_AFTER = False            # Append a Form Feed (0x0C) at the end of the job.
+                                  # Keep False for the Epson LQ-690 (continuous feed).
+                                  # Set True for page printers (laser/inkjet) that
+                                  # only eject a page on a form feed.
 
 # ── Text Encoding ─────────────────────────────────────────────────────────────
 # cp1256 = Windows Arabic (recommended for Saudi market)

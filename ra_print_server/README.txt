@@ -4,6 +4,8 @@ Royal Alwaha Trading Co. | RISC Division
 
 SETUP STEPS:
 1. Edit config.py → set PRINTER_NAME to exact Windows printer name
+   (For a laser/inkjet test printer, also set FORM_FEED_AFTER = True so the
+    page is ejected. Keep it False for the Epson LQ-690 continuous feed.)
 2. Run: build_exe.bat         → creates dist\ra_print_server.exe
 3. Copy ra_print_server.exe to your deployment folder (e.g. C:\PrintBridge\)
 4. Run: install_autostart.bat → registers EXE to run at Windows login
