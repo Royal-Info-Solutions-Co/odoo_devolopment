@@ -12,6 +12,7 @@ Run modes:
 
 import sys
 import json
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,6 +25,18 @@ from logger import get_logger
 
 log = get_logger("main")
 
+
+# ── Lifespan ──────────────────────────────────────────────────────────────────
+# uvicorn's own startup logging is disabled (log_config=None), so emit an
+# explicit "ready" line once the server is actually listening. This makes it
+# obvious the process is up rather than stuck.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info(f"RA Print Server ready — listening on http://{HOST}:{PORT}")
+    yield
+    log.info("RA Print Server shutting down")
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="RA Print Server",
@@ -31,6 +44,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",      # Disable in production by setting to None
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
