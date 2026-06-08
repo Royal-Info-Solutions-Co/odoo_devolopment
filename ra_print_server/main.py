@@ -18,7 +18,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from config import HOST, PORT, ALLOWED_ORIGINS, RECEIPT_COPIES, PRINTER_NAME
+from config import (
+    HOST, PORT, ALLOWED_ORIGINS, RECEIPT_COPIES, PRINTER_NAME,
+    USE_HTTPS, SSL_CERTFILE, SSL_KEYFILE,
+)
 from renderer import render_receipt
 from printer import send_raw, list_printers
 from logger import get_logger
@@ -32,7 +35,8 @@ log = get_logger("main")
 # obvious the process is up rather than stuck.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info(f"RA Print Server ready — listening on http://{HOST}:{PORT}")
+    scheme = "https" if USE_HTTPS else "http"
+    log.info(f"RA Print Server ready — listening on {scheme}://{HOST}:{PORT}")
     yield
     log.info("RA Print Server shutting down")
 
@@ -145,6 +149,17 @@ if __name__ == "__main__":
             log.exception("Could not enumerate printers at startup")
         log.info("=" * 60)
 
+        # TLS is optional (config.USE_HTTPS). When enabled, hand uvicorn the
+        # cert/key so it serves https — required for the Odoo Android app, whose
+        # WebView blocks an insecure http call from the https POS page.
+        ssl_kwargs = {}
+        if USE_HTTPS:
+            ssl_kwargs = {
+                "ssl_certfile": SSL_CERTFILE,
+                "ssl_keyfile": SSL_KEYFILE,
+            }
+            log.info(f"TLS enabled: cert={SSL_CERTFILE} key={SSL_KEYFILE}")
+
         # Pass the app object (not "main:app") so it works in a frozen
         # PyInstaller build where the module isn't importable by name.
         # log_config=None disables uvicorn's default colourized logging, which
@@ -157,6 +172,7 @@ if __name__ == "__main__":
             log_config=None,
             log_level="warning",   # Use file logger above; suppress uvicorn verbosity
             access_log=False,
+            **ssl_kwargs,
         )
     except Exception:
         log.exception("RA Print Server failed to start")
