@@ -37,6 +37,17 @@ function buildPrintPayload(order) {
         customer: r.client ? (r.client.name || "") : "Walk-in Customer",
         customer_phone: r.client ? (r.client.phone || "") : "",
 
+        // ── Partner (full object for ZATCA receipt) ──────────────────────
+        partner: r.client ? {
+            name: r.client.name || "",
+            ref: r.client.ref || "",
+            street: r.client.street || "",
+            vat: r.client.vat || "",
+            email: r.client.email || "",
+            phone: r.client.phone || "",
+            mobile: r.client.mobile || "",
+        } : null,
+
         // ── Order Lines ───────────────────────────────────────────────────
         lines: (r.orderlines || []).map(line => ({
             name: line.product_name || "",
@@ -47,6 +58,10 @@ function buildPrintPayload(order) {
             price_without_tax: line.price_without_tax || (line.price || 0),
             note: line.customer_note || "",
             unit: line.unit_name || "",
+            // ZATCA line-level fields (custom Odoo module adds these)
+            unitPriceBeforeTax: line.unitPriceBeforeTax || null,
+            taxBeforeDiscount: line.taxBeforeDiscount || null,
+            priceWithoutTaxBeforeDiscount: line.priceWithoutTaxBeforeDiscount || null,
         })),
 
         // ── Payments ─────────────────────────────────────────────────────
@@ -76,6 +91,12 @@ function buildPrintPayload(order) {
         // ── Header / Footer ───────────────────────────────────────────────
         header: r.header || "",
         footer: r.footer || "",
+
+        // ── Header Data (custom template fields) ─────────────────────────
+        header_data: r.headerData || {},
+
+        // ── ZATCA QR Code (base64 data URI) ──────────────────────────────
+        qr_code: r.qr_code || "",
     };
 }
 
