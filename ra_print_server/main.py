@@ -123,10 +123,15 @@ if __name__ == "__main__":
     log.info(f"Available printers: {list_printers()}")
     log.info("=" * 60)
 
+    # Pass the app object (not "main:app") so it works in a frozen PyInstaller
+    # build where the module isn't importable by name. log_config=None disables
+    # uvicorn's default colourized logging, which calls sys.stdout.isatty() and
+    # crashes in a --noconsole build where stdout is None. We log to file anyway.
     uvicorn.run(
-        "main:app",
+        app,
         host=HOST,
         port=PORT,
+        log_config=None,
         log_level="warning",   # Use file logger above; suppress uvicorn verbosity
         access_log=False,
     )

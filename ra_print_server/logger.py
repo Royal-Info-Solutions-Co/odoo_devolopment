@@ -1,6 +1,7 @@
 """Rotating file logger for the print server."""
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from config import LOG_FILE, LOG_MAX_BYTES, LOG_BACKUP_COUNT
 
@@ -19,8 +20,12 @@ def get_logger(name: str) -> logging.Logger:
             logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         )
         logger.addHandler(handler)
-        # Also log to console during development
-        console = logging.StreamHandler()
-        console.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-        logger.addHandler(console)
+        # Also log to console during development. A PyInstaller --noconsole
+        # build has no stdout/stderr (both are None), so guard against it to
+        # avoid crashing when a record is emitted.
+        stream = sys.stderr or sys.stdout
+        if stream is not None:
+            console = logging.StreamHandler(stream)
+            console.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+            logger.addHandler(console)
     return logger
