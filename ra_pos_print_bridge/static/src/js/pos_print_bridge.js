@@ -120,8 +120,10 @@ patch(ReceiptScreen.prototype, {
             console.log("[POS Bridge] Payload:", JSON.stringify(payload, null, 2));
         }
 
-        // Send to bridge
-        const url = `http://${BRIDGE_CONFIG.ip}:${BRIDGE_CONFIG.port}${BRIDGE_CONFIG.endpoint}`;
+        // Send to bridge. Use https when configured (required inside the Odoo
+        // Android app, whose WebView blocks insecure http from the https page).
+        const protocol = BRIDGE_CONFIG.use_https ? "https" : "http";
+        const url = `${protocol}://${BRIDGE_CONFIG.ip}:${BRIDGE_CONFIG.port}${BRIDGE_CONFIG.endpoint}`;
         const controller = new AbortController();
         const timeoutHandle = setTimeout(
             () => controller.abort(),

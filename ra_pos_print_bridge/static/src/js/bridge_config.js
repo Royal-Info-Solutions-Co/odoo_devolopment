@@ -10,7 +10,14 @@
 export const BRIDGE_CONFIG = {
     // ── Core Settings ──────────────────────────────────────────────────────
     enabled: true,                    // Set false to disable bridge (uses native print)
+    use_https: false,                 // ← Set true for the Odoo Android app. Its WebView
+                                      //   blocks an insecure http call from the https POS
+                                      //   page (mixed content). Requires the print server
+                                      //   to run over https with a CA-trusted cert, and
+                                      //   `ip` below must be the cert's HOSTNAME (not an IP).
     ip: "[BRIDGE_IP]",               // ← YOUR WINDOWS PC STATIC IP (e.g. "192.168.1.50")
+                                      //   When use_https is true, use the cert hostname
+                                      //   instead, e.g. "printbridge.royalalwaha.com".
     port: 8080,                       // Must match server's listening port
     endpoint: "/print",               // API endpoint on the Windows server
 
