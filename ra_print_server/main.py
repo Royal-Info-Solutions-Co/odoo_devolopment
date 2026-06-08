@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from config import HOST, PORT, ALLOWED_ORIGINS, RECEIPT_COPIES
+from config import HOST, PORT, ALLOWED_ORIGINS, RECEIPT_COPIES, PRINTER_NAME
 from renderer import render_receipt
 from printer import send_raw, list_printers
 from logger import get_logger
@@ -116,22 +116,34 @@ async def print_receipt(request: Request):
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    log.info("=" * 60)
-    log.info("RA Print Server starting...")
-    log.info(f"Listening on {HOST}:{PORT}")
-    log.info(f"Configured printer: PRINTER_NAME from config.py")
-    log.info(f"Available printers: {list_printers()}")
-    log.info("=" * 60)
+    # Everything is wrapped so that any startup failure is written to the log
+    # file. A --noconsole build has no visible console, so without this an
+    # exception (e.g. a missing bundled module or a printer enumeration error)
+    # would kill the process silently and the server would simply never listen.
+    try:
+        log.info("=" * 60)
+        log.info("RA Print Server starting...")
+        log.info(f"Listening on {HOST}:{PORT}")
+        log.info(f"Configured printer: {PRINTER_NAME}")
+        try:
+            log.info(f"Available printers: {list_printers()}")
+        except Exception:
+            log.exception("Could not enumerate printers at startup")
+        log.info("=" * 60)
 
-    # Pass the app object (not "main:app") so it works in a frozen PyInstaller
-    # build where the module isn't importable by name. log_config=None disables
-    # uvicorn's default colourized logging, which calls sys.stdout.isatty() and
-    # crashes in a --noconsole build where stdout is None. We log to file anyway.
-    uvicorn.run(
-        app,
-        host=HOST,
-        port=PORT,
-        log_config=None,
-        log_level="warning",   # Use file logger above; suppress uvicorn verbosity
-        access_log=False,
-    )
+        # Pass the app object (not "main:app") so it works in a frozen
+        # PyInstaller build where the module isn't importable by name.
+        # log_config=None disables uvicorn's default colourized logging, which
+        # calls sys.stdout.isatty() and crashes in a --noconsole build where
+        # stdout is None. We log to file anyway.
+        uvicorn.run(
+            app,
+            host=HOST,
+            port=PORT,
+            log_config=None,
+            log_level="warning",   # Use file logger above; suppress uvicorn verbosity
+            access_log=False,
+        )
+    except Exception:
+        log.exception("RA Print Server failed to start")
+        raise
