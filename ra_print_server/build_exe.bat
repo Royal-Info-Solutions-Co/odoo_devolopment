@@ -27,6 +27,10 @@ pyinstaller ^
     --name "ra_print_server" ^
     --add-data "config.py;." ^
     --collect-all uvicorn ^
+    --collect-all PIL ^
+    --hidden-import qr_render ^
+    --hidden-import PIL ^
+    --hidden-import PIL.Image ^
     --hidden-import win32print ^
     --hidden-import win32api ^
     --hidden-import win32con ^
