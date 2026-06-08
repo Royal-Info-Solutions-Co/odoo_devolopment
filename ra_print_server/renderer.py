@@ -77,8 +77,20 @@ def two_col(left: str, right: str, width: int = PAPER_COLS) -> str:
     return right_pad(left, right, width)
 
 
-def fmt_amount(amount: float, decimals: int = 2) -> str:
-    return f"{amount:,.{decimals}f}"
+def to_float(value: Any, default: float = 0.0) -> float:
+    """Coerce a value to float. The Odoo POS payload often sends numbers as
+    strings (e.g. "2.0"), so accept those and fall back to `default` on
+    anything non-numeric (None, "", text)."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_amount(amount: Any, decimals: int = 2) -> str:
+    return f"{to_float(amount):,.{decimals}f}"
 
 
 def fmt_date(date_dict: dict) -> str:
@@ -179,10 +191,10 @@ def render_receipt(data: Dict[str, Any]) -> bytes:
     w(CONDENSED_ON)
     for ln in data.get("lines", []):
         name = str(ln.get("name", ""))
-        qty  = ln.get("qty", 0)
-        unit_price = ln.get("unit_price", 0)
-        discount   = ln.get("discount", 0)
-        total      = ln.get("price_with_tax", 0)
+        qty  = to_float(ln.get("qty", 0))
+        unit_price = to_float(ln.get("unit_price", 0))
+        discount   = to_float(ln.get("discount", 0))
+        total      = to_float(ln.get("price_with_tax", 0))
 
         # Truncate product name to 40 chars
         if len(name) > 40:
@@ -208,12 +220,12 @@ def render_receipt(data: Dict[str, Any]) -> bytes:
 
     # ── Totals ────────────────────────────────────────────────────────────────
     totals = data.get("totals", {})
-    subtotal = totals.get("subtotal", 0)
-    tax      = totals.get("tax", 0)
-    total    = totals.get("total", 0)
-    paid     = totals.get("paid", 0)
-    change   = totals.get("change", 0)
-    discount = totals.get("discount", 0)
+    subtotal = to_float(totals.get("subtotal", 0))
+    tax      = to_float(totals.get("tax", 0))
+    total    = to_float(totals.get("total", 0))
+    paid     = to_float(totals.get("paid", 0))
+    change   = to_float(totals.get("change", 0))
+    discount = to_float(totals.get("discount", 0))
 
     label_col = 60  # Where labels end
 
