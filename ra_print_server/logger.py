@@ -20,12 +20,17 @@ def get_logger(name: str) -> logging.Logger:
             logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         )
         logger.addHandler(handler)
-        # Also log to console during development. A PyInstaller --noconsole
-        # build has no stdout/stderr (both are None), so guard against it to
-        # avoid crashing when a record is emitted.
-        stream = sys.stderr or sys.stdout
-        if stream is not None:
-            console = logging.StreamHandler(stream)
-            console.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-            logger.addHandler(console)
+        # Console logging is best-effort only (useful during development). A
+        # PyInstaller --noconsole build has no stdout/stderr, so this must never
+        # be allowed to break startup — swallow any failure.
+        try:
+            stream = sys.stderr if sys.stderr is not None else sys.stdout
+            if stream is not None:
+                console = logging.StreamHandler(stream)
+                console.setFormatter(
+                    logging.Formatter("[%(levelname)s] %(message)s")
+                )
+                logger.addHandler(console)
+        except Exception:
+            pass
     return logger
