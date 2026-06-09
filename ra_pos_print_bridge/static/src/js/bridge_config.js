@@ -1,32 +1,38 @@
 /** @odoo-module **/
 
 /**
- * RA POS Print Bridge — Configuration
+ * RA POS Print Bridge — Behaviour Configuration
  * Royal Alwaha Trading Co. | RISC Division
  *
- * IMPORTANT: Edit BRIDGE_IP to match your Windows print server's static IP.
- * This file is the only configuration point for the client side.
+ * Network settings (IP, port, enabled) are now configured per POS in Odoo:
+ *   Point of Sale → Configuration → Settings → Print Bridge
+ *
+ * This file controls non-network behaviour only.
+ * Changes here require an Odoo asset upgrade (./odoo-bin -u ra_pos_print_bridge).
  */
 export const BRIDGE_CONFIG = {
-    // ── Core Settings ──────────────────────────────────────────────────────
-    enabled: true,                    // Set false to disable bridge (uses native print)
-    use_https: false,                 // ← Set true for the Odoo Android app. Its WebView
-                                      //   blocks an insecure http call from the https POS
-                                      //   page (mixed content). Requires the print server
-                                      //   to run over https with a CA-trusted cert, and
-                                      //   `ip` below must be the cert's HOSTNAME (not an IP).
-    ip: "[BRIDGE_IP]",               // ← YOUR WINDOWS PC STATIC IP (e.g. "192.168.1.50")
-                                      //   When use_https is true, use the cert hostname
-                                      //   instead, e.g. "printbridge.royalalwaha.com".
-    port: 8080,                       // Must match server's listening port
-    endpoint: "/print",               // API endpoint on the Windows server
+    // ── Endpoint ──────────────────────────────────────────────────────────
+    // The URL path on the Windows server. Rarely needs changing.
+    endpoint: "/print",
 
-    // ── Behaviour ──────────────────────────────────────────────────────────
-    timeout_ms: 6000,                 // Abort if server doesn't respond within 6 seconds
-    fallback_to_native: true,         // If bridge fails, fall back to native Android print
-    show_success_toast: true,         // Show green notification on successful print
-    show_error_toast: true,           // Show red notification on bridge failure
+    // ── Timing ────────────────────────────────────────────────────────────
+    // How long to wait for the server to respond before giving up (ms)
+    timeout_ms: 6000,
 
-    // ── Debug ──────────────────────────────────────────────────────────────
-    debug_log: false,                 // Set true to log payloads to browser console
+    // Delay before capturing the receipt DOM (ms).
+    // Gives OWL time to finish rendering before we grab the HTML.
+    render_wait_ms: 300,
+
+    // ── Fallback ──────────────────────────────────────────────────────────
+    // If true: fall back to native device print when bridge is unreachable.
+    // If false: show error toast only, no native print.
+    fallback_to_native: true,
+
+    // ── Notifications ─────────────────────────────────────────────────────
+    show_success_toast: true,
+    show_error_toast:   true,
+
+    // ── Debug ─────────────────────────────────────────────────────────────
+    // Set true to log payload details and routing decisions to browser console.
+    debug_log: false,
 };

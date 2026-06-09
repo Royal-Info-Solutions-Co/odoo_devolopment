@@ -4,99 +4,51 @@ import { patch } from "@web/core/utils/patch";
 import { ReceiptScreen } from "@point_of_sale/app/screens/receipt_screen/receipt_screen";
 import { BRIDGE_CONFIG } from "./bridge_config";
 
-// ── Payload Builder ────────────────────────────────────────────────────────────
-// Extracts structured receipt data from the Odoo POS order object.
-// Uses order.export_for_printing() which is Odoo's canonical receipt data source.
+// ── Bridge Endpoint Resolver ───────────────────────────────────────────────────
+// Reads IP and port from the live pos.config record (loaded by pos.session).
+// Falls back gracefully if fields are missing or empty.
 
-function buildPrintPayload(order) {
-    const r = order.export_for_printing();
+function resolveBridgeEndpoint(posService) {
+    const config = posService && posService.config;
+
+    const enabled = config
+        ? (config.bridge_enabled !== undefined ? config.bridge_enabled : true)
+        : true;
+
+    const ip   = (config && config.bridge_printer_ip)   || "";
+    const port = (config && config.bridge_printer_port) || 8080;
+    const name = (config && (config.display_name || config.name)) || "default";
+
+    return { enabled, ip, port, configName: name };
+}
+
+// ── Payload Builder (HTML Mode) ────────────────────────────────────────────────
+
+function buildPrintPayload(order, configName) {
+    const receiptEl = document.querySelector(".pos-receipt");
+    if (!receiptEl) {
+        throw new Error(
+            "[POS Bridge] .pos-receipt element not found in DOM. " +
+            "Ensure the receipt screen is fully rendered before printing."
+        );
+    }
+
+    const html     = receiptEl.outerHTML;
+    const orderRef = (order && order.name) ? order.name : "unknown";
+
+    if (BRIDGE_CONFIG.debug_log) {
+        console.log(
+            `[POS Bridge] order=${orderRef} | config="${configName}" | ${html.length} chars`
+        );
+    }
 
     return {
-        // ── Meta ──────────────────────────────────────────────────────────
-        schema_version: "1.0",
-        printed_at: new Date().toISOString(),
-
-        // ── Order Identity ────────────────────────────────────────────────
-        order_ref: r.name || "",
-        pos_reference: r.pos_reference || r.name || "",
-        date: r.date || {},
-        note: r.note || "",
-
-        // ── Company ───────────────────────────────────────────────────────
-        company: {
-            name: (r.company && r.company.name) ? r.company.name : "",
-            address: (r.company && r.company.contact_address) ? r.company.contact_address : "",
-            phone: (r.company && r.company.phone) ? r.company.phone : "",
-            vat: (r.company && r.company.vat) ? r.company.vat : "",
-            email: (r.company && r.company.email) ? r.company.email : "",
-            website: (r.company && r.company.website) ? r.company.website : "",
-        },
-
-        // ── People ────────────────────────────────────────────────────────
-        cashier: r.cashier || "",
-        customer: r.client ? (r.client.name || "") : "Walk-in Customer",
-        customer_phone: r.client ? (r.client.phone || "") : "",
-
-        // ── Partner (full object for ZATCA receipt) ──────────────────────
-        partner: r.client ? {
-            name: r.client.name || "",
-            ref: r.client.ref || "",
-            street: r.client.street || "",
-            vat: r.client.vat || "",
-            email: r.client.email || "",
-            phone: r.client.phone || "",
-            mobile: r.client.mobile || "",
-        } : null,
-
-        // ── Order Lines ───────────────────────────────────────────────────
-        lines: (r.orderlines || []).map(line => ({
-            name: line.product_name || "",
-            qty: line.quantity || 0,
-            unit_price: line.price || 0,
-            discount: line.discount || 0,
-            price_with_tax: line.price_with_tax || 0,
-            price_without_tax: line.price_without_tax || (line.price || 0),
-            note: line.customer_note || "",
-            unit: line.unit_name || "",
-            // ZATCA line-level fields (custom Odoo module adds these)
-            unitPriceBeforeTax: line.unitPriceBeforeTax || null,
-            taxBeforeDiscount: line.taxBeforeDiscount || null,
-            priceWithoutTaxBeforeDiscount: line.priceWithoutTaxBeforeDiscount || null,
-        })),
-
-        // ── Payments ─────────────────────────────────────────────────────
-        payments: (r.paymentlines || []).map(p => ({
-            name: p.name || "",
-            amount: p.amount || 0,
-        })),
-
-        // ── Totals ────────────────────────────────────────────────────────
-        totals: {
-            subtotal: r.total_without_tax || 0,
-            tax: r.total_tax || 0,
-            total: r.total_with_tax || 0,
-            paid: r.total_paid || 0,
-            change: r.change || 0,
-            discount: r.total_discount || 0,
-            rounding: r.rounding_applied || 0,
-        },
-
-        // ── Tax Details ───────────────────────────────────────────────────
-        tax_details: (r.tax_details || []).map(t => ({
-            name: t.tax_name || t.tax_group_name || "",
-            base: t.base_amount || 0,
-            amount: t.tax_amount || 0,
-        })),
-
-        // ── Header / Footer ───────────────────────────────────────────────
-        header: r.header || "",
-        footer: r.footer || "",
-
-        // ── Header Data (custom template fields) ─────────────────────────
-        header_data: r.headerData || {},
-
-        // ── ZATCA QR Code (base64 data URI) ──────────────────────────────
-        qr_code: r.qr_code || "",
+        schema_version:  "2.1",
+        mode:            "html",
+        order_ref:       orderRef,
+        pos_config_name: configName,
+        html:            html,
+        copies:          1,
     };
 }
 
@@ -106,46 +58,56 @@ patch(ReceiptScreen.prototype, {
 
     async printReceipt() {
 
-        // If bridge is disabled globally, fall through to native Odoo print
-        if (!BRIDGE_CONFIG.enabled) {
+        // ── Resolve config from live pos.config record ─────────────────────
+        const { enabled, ip, port, configName } = resolveBridgeEndpoint(this.pos);
+
+        // If disabled in POS settings, fall through to native print immediately
+        if (!enabled) {
+            if (BRIDGE_CONFIG.debug_log) {
+                console.log("[POS Bridge] Disabled in POS config — using native print.");
+            }
+            return super.printReceipt();
+        }
+
+        // If no IP configured, warn and fall through
+        if (!ip) {
+            console.warn(
+                "[POS Bridge] No Bridge Server IP set for this POS config. " +
+                "Go to Point of Sale → Configuration → Settings → Print Bridge."
+            );
             return super.printReceipt();
         }
 
         const order = this.currentOrder;
-        if (!order) {
-            console.warn("[POS Bridge] No current order — falling back to native print.");
-            return super.printReceipt();
+        const url   = `http://${ip}:${port}${BRIDGE_CONFIG.endpoint}`;
+
+        if (BRIDGE_CONFIG.debug_log) {
+            console.log(`[POS Bridge] Routing: ${url} (config: "${configName}")`);
         }
 
-        // Helper to show OWL notification
+        // Allow OWL render cycle to complete before capturing HTML
+        await new Promise(resolve =>
+            setTimeout(resolve, BRIDGE_CONFIG.render_wait_ms)
+        );
+
         const notify = (message, type = "info") => {
             try {
                 if (this.notification && this.notification.add) {
                     this.notification.add(message, { type, duration: 3000 });
                 }
-            } catch (_) {
-                // Notification service may not be available in all contexts — silent fail
-            }
+            } catch (_) { /* silent */ }
         };
 
-        // Build payload
         let payload;
         try {
-            payload = buildPrintPayload(order);
+            payload = buildPrintPayload(order, configName);
         } catch (err) {
-            console.error("[POS Bridge] Failed to build payload:", err);
+            console.error("[POS Bridge] Payload build failed:", err);
+            notify("Could not capture receipt HTML — using device print", "warning");
             return super.printReceipt();
         }
 
-        if (BRIDGE_CONFIG.debug_log) {
-            console.log("[POS Bridge] Payload:", JSON.stringify(payload, null, 2));
-        }
-
-        // Send to bridge. Use https when configured (required inside the Odoo
-        // Android app, whose WebView blocks insecure http from the https page).
-        const protocol = BRIDGE_CONFIG.use_https ? "https" : "http";
-        const url = `${protocol}://${BRIDGE_CONFIG.ip}:${BRIDGE_CONFIG.port}${BRIDGE_CONFIG.endpoint}`;
-        const controller = new AbortController();
+        const controller    = new AbortController();
         const timeoutHandle = setTimeout(
             () => controller.abort(),
             BRIDGE_CONFIG.timeout_ms
@@ -153,12 +115,12 @@ patch(ReceiptScreen.prototype, {
 
         try {
             const response = await fetch(url, {
-                method: "POST",
+                method:  "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-Source": "odoo-pos-bridge",
+                    "X-Source":     "odoo-pos-bridge",
                 },
-                body: JSON.stringify(payload),
+                body:   JSON.stringify(payload),
                 signal: controller.signal,
             });
 
@@ -170,30 +132,29 @@ patch(ReceiptScreen.prototype, {
                     if (BRIDGE_CONFIG.show_success_toast) {
                         notify("Receipt sent to printer ✓", "success");
                     }
-                    return;  // ← Success: skip native print entirely
+                    return;
                 }
-                // Server returned ok=true but success=false in body
-                throw new Error(result.error || "Bridge reported print failure");
+                throw new Error(result.error || "Bridge reported failure");
             }
-
             throw new Error(`Bridge HTTP ${response.status}`);
 
         } catch (err) {
             clearTimeout(timeoutHandle);
-
             const isTimeout = err.name === "AbortError";
             const msg = isTimeout
-                ? "Print bridge timeout — check if server is running"
+                ? `Print bridge timeout — is ${ip}:${port} reachable?`
                 : `Print bridge error: ${err.message}`;
 
             console.error("[POS Bridge]", msg);
 
-            if (BRIDGE_CONFIG.show_error_toast && BRIDGE_CONFIG.fallback_to_native) {
-                notify("Bridge unreachable — using device print", "warning");
-            } else if (BRIDGE_CONFIG.show_error_toast) {
-                notify(msg, "danger");
+            if (BRIDGE_CONFIG.show_error_toast) {
+                notify(
+                    BRIDGE_CONFIG.fallback_to_native
+                        ? `Bridge unreachable — using device print`
+                        : msg,
+                    BRIDGE_CONFIG.fallback_to_native ? "warning" : "danger"
+                );
             }
-
             if (BRIDGE_CONFIG.fallback_to_native) {
                 return super.printReceipt();
             }
