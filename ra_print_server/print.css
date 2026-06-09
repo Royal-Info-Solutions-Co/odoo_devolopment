@@ -1,0 +1,214 @@
+/*
+ * RA Print Server — Receipt Print Stylesheet
+ * Royal Alwaha Trading Co. | RISC Division
+ *
+ * THIS IS THE ONLY FILE YOU NEED TO EDIT FOR RECEIPT LAYOUT CHANGES.
+ * No Python code changes. No EXE rebuild. No server restart needed.
+ * Edit this file → save → next print job picks it up automatically.
+ *
+ * Targets: tis_pos_receipt_a4_formate CSS class structure
+ * Paper:   Epson LQ-690, 8-inch continuous feed, 20.32cm wide
+ */
+
+/* ── Page Setup ────────────────────────────────────────────────────────────── */
+@page {
+    /* Width matches 8-inch paper; height auto = content height only (no blank feed) */
+    size: 20cm auto;
+    margin: 0.3cm 0.4cm;
+}
+
+/* ── Base Typography ────────────────────────────────────────────────────────── */
+body {
+    font-family: "Arial", "Helvetica", sans-serif;
+    font-size: 9pt;
+    color: #000000;
+    background: #ffffff;
+    margin: 0;
+    padding: 0;
+}
+
+/* ── Receipt Root ────────────────────────────────────────────────────────────  */
+.pos-receipt {
+    width: 100%;
+}
+
+.royal-invoice-bg {
+    width: 100%;
+}
+
+.receipt_body {
+    width: 100%;
+}
+
+/* ── Order Info Header Table ─────────────────────────────────────────────────
+   Three-column table: customer info | QR code | order meta
+   Original CSS has margin-top: 4.5cm — override to zero for receipt paper
+────────────────────────────────────────────────────────────────────────────── */
+.order_info {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0 !important;   /* ← override the original 4.5cm top margin */
+    line-height: 1.4;
+}
+
+.order_info_column {
+    display: table-cell;
+    vertical-align: top;
+    font-size: 8.5pt;
+    padding: 2px 4px;
+}
+
+.cutomer_column {
+    width: 35%;
+    text-align: left;
+}
+
+.qr_column {
+    width: 20%;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.order_data_column {
+    width: 45%;
+    text-align: right;
+    float: none !important;   /* override original float: right */
+}
+
+/* ── QR Code ─────────────────────────────────────────────────────────────────  */
+#qrcode {
+    max-width: 2.8cm;
+    max-height: 2.8cm;
+    display: block;
+    margin: 0 auto;
+}
+
+/* ── Invoice Type + Order Meta text ─────────────────────────────────────────── */
+.order_data_column span {
+    font-size: 9pt;
+}
+
+/* ── Order Lines Table ───────────────────────────────────────────────────────── */
+.orderlines_info {
+    width: 100%;
+    margin-top: 0.3cm !important;  /* override original 1.5cm */
+}
+
+.orderlines_table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    line-height: 1.35;
+}
+
+.orderlines_table tr.item {
+    border-bottom: 0.3pt solid #cccccc;
+}
+
+.product_name {
+    width: 52%;
+    text-align: left;
+    padding: 1px 3px;
+    border: none !important;
+}
+
+.product_qty {
+    width: 8%;
+    text-align: right;
+    padding: 1px 3px;
+}
+
+.product_price {
+    width: 13%;
+    text-align: right;
+    padding: 1px 3px;
+}
+
+.product_tax {
+    width: 12%;
+    text-align: right;
+    padding: 1px 3px;
+}
+
+.product_total {
+    width: 15%;
+    text-align: right;
+    padding: 1px 3px;
+    font-weight: bold;
+}
+
+/* ── Totals Table ───────────────────────────────────────────────────────────── */
+.order_total_table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.2cm;
+    text-align: right;
+    font-size: 9pt;
+    line-height: 1.5;
+}
+
+.order-toatal-row-spacing {
+    width: 80%;
+    text-align: right;
+    padding-right: 6px;
+    color: #333;
+}
+
+.order-toatal-row-value {
+    width: 20%;
+    text-align: right;
+    padding-right: 4px;
+    font-weight: bold;
+}
+
+/* Last row of totals (Grand Total) — larger and bold */
+.order_total_table tr:last-child .order-toatal-row-value {
+    font-size: 11pt;
+    font-weight: bold;
+    border-top: 1pt solid #000;
+    padding-top: 3px;
+}
+
+/* ── Background / Decorative Images ─────────────────────────────────────────── */
+/* The module uses background images (Invoice.jpg) — suppress for receipt paper */
+.royal-invoice-bg {
+    background-image: none !important;
+    background: #ffffff !important;
+}
+
+/* Hide any <img> that is not the QR code (e.g. logo backgrounds) */
+img:not(#qrcode) {
+    display: none !important;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────────────── */
+h3 {
+    font-size: 10pt;
+    font-weight: bold;
+    margin: 0 0 2px 0;
+}
+
+/* ── Arabic / RTL Support ────────────────────────────────────────────────────── */
+/* Bilingual spans (e.g. "Tax Invoice - فاتورة ضريبية") display inline */
+span[style*="font-weight:bold"] {
+    font-size: 10pt !important;
+    display: block;
+    text-align: center;
+    border-top: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #000;
+    padding: 2px 0;
+    margin: 3px 0;
+}
+
+/* ── Page Break Control ──────────────────────────────────────────────────────── */
+/* Never insert page breaks inside the receipt */
+.pos-receipt,
+.royal-invoice-bg,
+.receipt_body,
+.order_info,
+.orderlines_info,
+.order_total_table {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}

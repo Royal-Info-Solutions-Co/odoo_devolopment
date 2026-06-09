@@ -18,12 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from config import (
-    HOST, PORT, ALLOWED_ORIGINS, RECEIPT_COPIES, PRINTER_NAME,
-    USE_HTTPS, SSL_CERTFILE, SSL_KEYFILE,
-)
-from renderer import render_receipt
-from printer import send_raw, list_printers
+from config import HOST, PORT, ALLOWED_ORIGINS
+from html_renderer import render_to_pdf
+from printer import send_pdf, list_printers
 from logger import get_logger
 
 log = get_logger("main")
@@ -35,8 +32,7 @@ log = get_logger("main")
 # obvious the process is up rather than stuck.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheme = "https" if USE_HTTPS else "http"
-    log.info(f"RA Print Server ready — listening on {scheme}://{HOST}:{PORT}")
+    log.info(f"RA Print Server ready — listening on http://{HOST}:{PORT}")
     yield
     log.info("RA Print Server shutting down")
 
@@ -106,29 +102,35 @@ async def print_receipt(request: Request):
     order_ref = data.get("order_ref", "unknown")
     log.info(f"Print request received: order={order_ref}")
 
-    # ── Render ────────────────────────────────────────────────────────────────
+    # ── Validate HTML payload ─────────────────────────────────────────────────
+    html_fragment = data.get("html", "").strip()
+    if not html_fragment:
+        log.warning(f"Empty HTML in payload for order {order_ref}")
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "No HTML content in payload"}
+        )
+
+    # ── Render HTML → PDF ─────────────────────────────────────────────────────
     try:
-        raw_bytes = render_receipt(data)
+        pdf_bytes = render_to_pdf(html_fragment)
     except Exception as e:
-        log.error(f"Render failed for order {order_ref}: {e}", exc_info=True)
+        log.error(f"PDF render failed for order {order_ref}: {e}", exc_info=True)
         return JSONResponse(
             content={"success": False, "error": f"Render error: {str(e)}"}
         )
 
-    # ── Print (with optional copies) ─────────────────────────────────────────
+    # ── Print PDF via SumatraPDF ──────────────────────────────────────────────
     try:
-        for copy_num in range(RECEIPT_COPIES):
-            send_raw(raw_bytes)
-            if RECEIPT_COPIES > 1:
-                log.info(f"Printed copy {copy_num + 1}/{RECEIPT_COPIES}")
+        send_pdf(pdf_bytes)
     except Exception as e:
         log.error(f"Print dispatch failed for order {order_ref}: {e}", exc_info=True)
         return JSONResponse(
             content={"success": False, "error": f"Printer error: {str(e)}"}
         )
 
-    log.info(f"Order {order_ref} printed successfully ({len(raw_bytes)} bytes)")
-    return JSONResponse(content={"success": True, "bytes_sent": len(raw_bytes)})
+    log.info(f"Order {order_ref} printed ({len(pdf_bytes)} PDF bytes)")
+    return JSONResponse(content={"success": True, "bytes_sent": len(pdf_bytes)})
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
@@ -142,23 +144,13 @@ if __name__ == "__main__":
         log.info("=" * 60)
         log.info("RA Print Server starting...")
         log.info(f"Listening on {HOST}:{PORT}")
+        from config import PRINTER_NAME
         log.info(f"Configured printer: {PRINTER_NAME}")
         try:
             log.info(f"Available printers: {list_printers()}")
         except Exception:
             log.exception("Could not enumerate printers at startup")
         log.info("=" * 60)
-
-        # TLS is optional (config.USE_HTTPS). When enabled, hand uvicorn the
-        # cert/key so it serves https — required for the Odoo Android app, whose
-        # WebView blocks an insecure http call from the https POS page.
-        ssl_kwargs = {}
-        if USE_HTTPS:
-            ssl_kwargs = {
-                "ssl_certfile": SSL_CERTFILE,
-                "ssl_keyfile": SSL_KEYFILE,
-            }
-            log.info(f"TLS enabled: cert={SSL_CERTFILE} key={SSL_KEYFILE}")
 
         # Pass the app object (not "main:app") so it works in a frozen
         # PyInstaller build where the module isn't importable by name.
@@ -172,7 +164,6 @@ if __name__ == "__main__":
             log_config=None,
             log_level="warning",   # Use file logger above; suppress uvicorn verbosity
             access_log=False,
-            **ssl_kwargs,
         )
     except Exception:
         log.exception("RA Print Server failed to start")

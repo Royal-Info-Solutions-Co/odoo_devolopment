@@ -1,60 +1,107 @@
 """
-Windows Printer Dispatcher
-Sends raw ESC/P bytes directly to the named Windows printer,
-bypassing the Windows print spooler's GDI rendering.
+RA Print Server — PDF Printer Dispatcher
+Royal Alwaha Trading Co. | RISC Division
 
-Uses win32print with RAW data type for true dot-matrix output.
+Writes PDF bytes to a temporary file then invokes SumatraPDF
+for silent, zero-dialog printing to the configured Windows printer.
+
+SumatraPDF command used:
+    SumatraPDF.exe -print-to "<printer>" -print-settings "noscale" -silent <file>
+
+Why SumatraPDF:
+  - Portable EXE, no installation required
+  - True silent print (no dialog, no UI flash)
+  - Handles PDF → Windows GDI conversion reliably
+  - -print-settings "noscale" prevents auto-scaling the receipt
 """
 
-import win32print
+import os
+import sys
+import subprocess
+import tempfile
 from logger import get_logger
-from config import PRINTER_NAME
+from config import PRINTER_NAME, SUMATRA_EXE, SUMATRA_TIMEOUT, RECEIPT_COPIES
 
 log = get_logger("printer")
 
 
-def list_printers() -> list:
-    """Return list of all installed Windows printers."""
-    return [p[2] for p in win32print.EnumPrinters(
-        win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-    )]
+def _resolve_path(filename: str) -> str:
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    full = os.path.join(base, filename)
+    return full if os.path.exists(full) else filename
 
 
-def send_raw(data: bytes, printer_name: str = PRINTER_NAME) -> None:
+def send_pdf(pdf_bytes: bytes, printer_name: str = PRINTER_NAME) -> None:
     """
-    Send raw bytes to the specified Windows printer.
-
-    Uses DOC_INFO_1 with "RAW" datatype to bypass Windows GDI and
-    send ESC/P commands directly to the printer driver.
+    Write pdf_bytes to a temp file and print silently via SumatraPDF.
 
     Args:
-        data:         Raw ESC/P byte sequence from renderer.
-        printer_name: Windows printer name (from config.py).
+        pdf_bytes:    Raw PDF bytes from html_renderer.render_to_pdf()
+        printer_name: Windows printer name (from config.py)
 
     Raises:
-        RuntimeError: If printer cannot be opened or job fails.
+        RuntimeError: if SumatraPDF is not found or print job fails.
     """
-    available = list_printers()
-    if printer_name not in available:
+    sumatra = _resolve_path(SUMATRA_EXE)
+    if not os.path.exists(sumatra):
         raise RuntimeError(
-            f"Printer '{printer_name}' not found. "
-            f"Available printers: {available}"
+            f"SumatraPDF not found at '{sumatra}'. "
+            "Download SumatraPDF.exe (portable) and place it next to ra_print_server.exe. "
+            "Get it from: https://www.sumatrapdfreader.org/download-free-pdf-viewer"
         )
 
-    handle = win32print.OpenPrinter(printer_name)
+    # Write PDF to a named temp file (SumatraPDF needs a file path, not stdin)
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".pdf", delete=False, prefix="ra_receipt_"
+    )
     try:
-        job = win32print.StartDocPrinter(
-            handle,
-            1,
-            ("RA POS Receipt", None, "RAW")
-        )
-        try:
-            win32print.StartPagePrinter(handle)
-            win32print.WritePrinter(handle, data)
-            win32print.EndPagePrinter(handle)
-        finally:
-            win32print.EndDocPrinter(handle)
-    finally:
-        win32print.ClosePrinter(handle)
+        tmp.write(pdf_bytes)
+        tmp.close()
 
-    log.info(f"Sent {len(data)} bytes to '{printer_name}'")
+        for copy_num in range(RECEIPT_COPIES):
+            cmd = [
+                sumatra,
+                "-print-to", printer_name,
+                "-print-settings", "noscale",
+                "-silent",
+                tmp.name,
+            ]
+
+            log.info(f"Printing copy {copy_num + 1}/{RECEIPT_COPIES} to '{printer_name}'")
+
+            result = subprocess.run(
+                cmd,
+                timeout=SUMATRA_TIMEOUT,
+                capture_output=True,
+            )
+
+            if result.returncode != 0:
+                stderr = result.stderr.decode(errors="replace").strip()
+                raise RuntimeError(
+                    f"SumatraPDF exited with code {result.returncode}: {stderr}"
+                )
+
+        log.info(
+            f"Print job complete: {len(pdf_bytes)} bytes, "
+            f"{RECEIPT_COPIES} copies to '{printer_name}'"
+        )
+
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass  # temp file cleanup failure is non-fatal
+
+
+def list_printers() -> list:
+    """Return list of installed Windows printers (for /health endpoint)."""
+    try:
+        import win32print
+        return [p[2] for p in win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        )]
+    except Exception:
+        return []
