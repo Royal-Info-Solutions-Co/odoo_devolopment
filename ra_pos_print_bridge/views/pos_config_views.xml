@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!--
+        Adds a "Print Bridge" section to the POS Configuration settings form.
+        Inherits the standard Odoo POS config form view.
+
+        Placement: appended inside the main settings container, after all
+        existing settings boxes, so it never conflicts with core Odoo changes.
+    -->
+    <record id="view_pos_config_form_bridge_settings" model="ir.ui.view">
+        <field name="name">pos.config.form.bridge.settings</field>
+        <field name="model">pos.config</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_config_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Append our section at the end of the settings container -->
+            <xpath expr="//div[hasclass('o_settings_container')]" position="inside">
+
+                <div class="o_setting_box" id="bridge_settings_box">
+
+                    <!-- Section heading (left column) -->
+                    <div class="o_setting_left_pane">
+                        <field name="bridge_enabled"
+                               widget="boolean_toggle"/>
+                    </div>
+
+                    <!-- Section content (right column) -->
+                    <div class="o_setting_right_pane">
+
+                        <label for="bridge_enabled"
+                               string="Print Bridge"/>
+
+                        <div class="text-muted">
+                            Route POS receipts to a local Windows USB printer
+                            via the RA Print Bridge server.
+                        </div>
+
+                        <!-- IP + Port fields — shown only when bridge is enabled -->
+                        <div class="content-group mt8"
+                             attrs="{'invisible': [('bridge_enabled', '=', False)]}">
+
+                            <div class="row mt4">
+                                <label for="bridge_printer_ip"
+                                       string="Bridge Server IP"
+                                       class="col-lg-3 o_light_label"/>
+                                <field name="bridge_printer_ip"
+                                       class="col-lg-3"
+                                       placeholder="e.g. 192.168.1.50"
+                                       attrs="{'required': [('bridge_enabled', '=', True)]}"/>
+                            </div>
+
+                            <div class="row mt4">
+                                <label for="bridge_printer_port"
+                                       string="Bridge Server Port"
+                                       class="col-lg-3 o_light_label"/>
+                                <field name="bridge_printer_port"
+                                       class="col-lg-1"
+                                       attrs="{'required': [('bridge_enabled', '=', True)]}"/>
+                                <span class="col-lg-4 text-muted o_form_label_factor">
+                                    Default: 8080
+                                </span>
+                            </div>
+
+                            <!-- Live health check link -->
+                            <div class="row mt4">
+                                <div class="col-lg-12">
+                                    <span class="text-muted" style="font-size:12px;">
+                                        Test connectivity:
+                                    </span>
+                                    <field name="bridge_printer_ip"
+                                           invisible="1"
+                                           id="bridge_ip_hidden"/>
+                                    <!-- The href below is informational text only;
+                                         actual test is done from the browser -->
+                                    <code style="font-size:11px; margin-left:6px;">
+                                        http://[IP]:[PORT]/health
+                                    </code>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
