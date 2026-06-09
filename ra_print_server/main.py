@@ -15,7 +15,7 @@ import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 
 from config import (
@@ -51,16 +51,52 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-# Required: Odoo POS web view sends cross-origin requests from the Odoo server
-# domain to this local server IP. Without this, the browser will block the request.
+# ── CORS + Private Network Access ─────────────────────────────────────────
+#
+# Standard CORSMiddleware handles the basic cross-origin headers.
+#
+# The custom middleware below adds:
+#   Access-Control-Allow-Private-Network: true
+#
+# This header is REQUIRED for Android WebView (Odoo app) to allow fetch()
+# to local network IPs (192.168.x.x, 10.x.x.x).
+# Without it, Android WebView silently drops the OPTIONS preflight request
+# before it reaches the server — resulting in zero logs and zero prints.
+# Desktop Chrome and mobile Chrome browser are more lenient; WebView is not.
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Source"],
+    allow_headers=["Content-Type", "X-Source", "Access-Control-Request-Private-Network"],
 )
+
+@app.middleware("http")
+async def private_network_access_middleware(request: Request, call_next):
+    """
+    Inject Access-Control-Allow-Private-Network: true on every response.
+
+    For OPTIONS preflight: return immediately with 200 + all required headers
+    so the WebView accepts the preflight without waiting for the actual handler.
+
+    For all other requests: append the header to the normal response.
+    """
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response as FastAPIResponse
+        headers = {
+            "Access-Control-Allow-Origin":          "*",
+            "Access-Control-Allow-Methods":         "POST, GET, OPTIONS",
+            "Access-Control-Allow-Headers":         "Content-Type, X-Source",
+            "Access-Control-Allow-Private-Network": "true",
+            "Access-Control-Max-Age":               "86400",
+        }
+        return FastAPIResponse(status_code=200, headers=headers)
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
